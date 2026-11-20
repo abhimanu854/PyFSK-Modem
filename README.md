@@ -113,12 +113,33 @@ python -m pyfsk_modem send "Secret from Phone" --wav phone_msg.wav
 python -m pyfsk_modem send "Low Volume" --device 0 --amplitude 0.5
 ```
 
-### 3. Mobile Phone Transmitter (Web UI)
-Transmit directly from any smartphone without installing software on the phone:
+### 3. Mobile Phone Transmitter (Interactive Web UI)
+Transmit directly from any smartphone (iOS or Android) without installing software on the phone:
 ```bash
 python -m pyfsk_modem web
 ```
-Open the displayed URL (e.g. `http://192.168.1.X:8080`) in your phone's browser (Safari or Chrome), type a message, and tap **TRANSMIT** to send acoustic packets via the phone's speaker!
+Open the displayed URL (e.g., `http://192.168.1.X:8080`) in your phone's browser (Safari or Chrome), type a message, and tap **TRANSMIT OVER SPEAKER**!
+
+#### 🔒 Zero-Network Air-Gap Guarantee
+> **Does the web app send text to the laptop over Wi-Fi?**
+>
+> **No.** Wi-Fi is used **only once** to deliver the static HTML/JavaScript page to the phone's browser. Once the page is loaded:
+> - All packet framing, CRC-16 computation, and Continuous-Phase BFSK waveform synthesis occur **100% locally on your phone's CPU**.
+> - The phone's **HTML5 Web Audio API (`AudioContext`)** drives the phone's **physical speaker** to emit acoustic sound waves.
+> - The laptop runs `python -m pyfsk_modem listen` with **no network connection to the phone**. It captures sound purely through its **physical microphone**!
+
+#### ✈️ The "Airplane Mode" Proof Test
+To prove that communication is 100% acoustic and not over Wi-Fi:
+1. Open the web interface on your phone.
+2. Turn **ON Airplane Mode** (or disconnect Wi-Fi entirely on your phone).
+3. Type a message and tap **TRANSMIT**.
+4. Your phone speaker will play the acoustic chirp, and your laptop microphone will decode the text immediately over the physical air gap!
+
+#### 🎮 Interactive Features on Phone:
+- **Real-Time Oscilloscope**: Live audio waveform rendered on `<canvas>` via Web Audio `AnalyserNode`.
+- **Packet Inspector**: Live bitstream preview, packet length indicator, and calculated CRC-16-CCITT badge.
+- **Quick Preset Pills**: One-tap demo messages (*Ping 📡*, *Secret Key 🔑*, *Phone Demo 📱*).
+- **Haptic Feedback**: Mobile vibration pulses synchronized with acoustic burst completion.
 
 ### 4. Receive / Listen (RX)
 Continuously listen on your microphone and decode incoming packets:

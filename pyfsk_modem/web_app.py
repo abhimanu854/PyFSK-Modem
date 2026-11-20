@@ -1,7 +1,8 @@
 """Mobile Web Audio Transmitter for PyFSK-Modem.
 
-Serves an HTML5 Web Audio transmitter interface over the local network so any
-smartphone (iPhone / Android) can transmit acoustic BFSK packets over its speaker.
+Serves an interactive, graphical HTML5 Web Audio transmitter interface so any
+smartphone (iPhone / Android) can synthesize and transmit acoustic BFSK packets
+directly through its physical speaker over a true air gap.
 """
 
 from __future__ import annotations
@@ -18,58 +19,368 @@ HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PyFSK Mobile Transmitter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PyFSK Acoustic Air-Gap Transmitter</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background: #0f111a; color: #e6edf3; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-    .card { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 28px; width: 100%; max-width: 440px; box-shadow: 0 12px 32px rgba(0,0,0,0.4); }
-    h1 { font-size: 1.5rem; text-align: center; color: #58a6ff; margin-bottom: 6px; }
-    p.sub { font-size: 0.85rem; text-align: center; color: #8b949e; margin-bottom: 24px; }
-    label { display: block; font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; margin-bottom: 6px; }
-    input[type="text"], select { width: 100%; padding: 12px 14px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #f0f6fc; font-size: 1rem; margin-bottom: 18px; outline: none; }
-    input[type="text"]:focus, select:focus { border-color: #58a6ff; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    button { width: 100%; padding: 16px; background: #238636; border: none; border-radius: 12px; color: #fff; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease; margin-top: 8px; }
-    button:hover { background: #2ea043; transform: translateY(-1px); }
-    button:active { transform: translateY(1px); }
-    button:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
-    .status { margin-top: 20px; padding: 12px; background: #0d1117; border-radius: 8px; font-size: 0.85rem; border-left: 4px solid #58a6ff; min-height: 48px; display: flex; align-items: center; }
-    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: bold; background: #1f6feb; color: white; margin-left: 6px; }
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(22, 27, 44, 0.85);
+      --border: #2d3748;
+      --accent: #00f2fe;
+      --accent-glow: rgba(0, 242, 254, 0.4);
+      --mark-color: #00ff87;
+      --space-color: #ff007f;
+      --text: #f0f6fc;
+      --text-muted: #8b949e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "SF Pro Display", sans-serif; }
+    body {
+      background: radial-gradient(circle at 50% 20%, #151c33 0%, #080a10 100%);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+      overflow-x: hidden;
+    }
+    .hud-container {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 242, 254, 0.25);
+      border-radius: 24px;
+      padding: 24px 20px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px var(--accent-glow);
+      position: relative;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 18px;
+      position: relative;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(0, 255, 135, 0.12);
+      border: 1px solid #00ff87;
+      color: #00ff87;
+      margin-bottom: 10px;
+    }
+    .status-badge .dot {
+      width: 7px;
+      height: 7px;
+      background: #00ff87;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #00ff87;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+    h1 {
+      font-size: 1.55rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    /* Visualizer Canvas */
+    .canvas-card {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #060911;
+      margin-bottom: 16px;
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 110px;
+    }
+    .canvas-overlay {
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-family: monospace;
+      pointer-events: none;
+    }
+    .canvas-overlay .legend {
+      display: flex;
+      gap: 10px;
+    }
+    .legend-mark { color: var(--mark-color); }
+    .legend-space { color: var(--space-color); }
+
+    /* Form Inputs */
+    label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .input-wrapper {
+      position: relative;
+      margin-bottom: 14px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 14px 16px;
+      background: #0a0e1a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 1rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+    /* Quick Pills */
+    .quick-pills {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 14px;
+      scrollbar-width: none;
+    }
+    .quick-pills::-webkit-scrollbar { display: none; }
+    .pill {
+      white-space: nowrap;
+      padding: 5px 10px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.72rem;
+      color: #c9d1d9;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .pill:hover, .pill:active {
+      background: rgba(0, 242, 254, 0.2);
+      border-color: var(--accent);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    select {
+      width: 100%;
+      padding: 12px;
+      background: #0a0e1a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    /* Big Transmit Button */
+    .btn-tx {
+      width: 100%;
+      padding: 18px;
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      border: none;
+      border-radius: 16px;
+      color: #050a14;
+      font-size: 1.12rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0, 242, 254, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .btn-tx:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(0, 242, 254, 0.6);
+    }
+    .btn-tx:active {
+      transform: translateY(1px);
+    }
+    .btn-tx:disabled {
+      background: #1f2738;
+      color: #556075;
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-tx.transmitting {
+      background: linear-gradient(135deg, #ff0844 0%, #ffb199 100%);
+      box-shadow: 0 0 30px rgba(255, 8, 68, 0.7);
+      animation: txPulse 0.8s infinite alternate;
+    }
+    @keyframes txPulse {
+      0% { transform: scale(0.99); opacity: 0.9; }
+      100% { transform: scale(1.02); opacity: 1; }
+    }
+    /* Live Packet Inspector */
+    .packet-inspector {
+      margin-top: 16px;
+      background: #060911;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 0.75rem;
+      font-family: monospace;
+    }
+    .packet-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      color: var(--text-muted);
+    }
+    .packet-row span.val { color: var(--accent); font-weight: bold; }
+    .bit-stream {
+      word-break: break-all;
+      color: #58a6ff;
+      max-height: 48px;
+      overflow-y: auto;
+      margin-top: 6px;
+      font-size: 0.68rem;
+      line-height: 1.3;
+      padding: 4px 6px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 6px;
+    }
+    .notice {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 0.7rem;
+      color: #6e7681;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>📡 PyFSK Phone TX</h1>
-    <p class="sub">Acoustic Air-Gap Transmitter</p>
+  <div class="hud-container">
+    <div class="header">
+      <div class="status-badge">
+        <div class="dot"></div>
+        <span>Air-Gap Ready • 100% Client-Side</span>
+      </div>
+      <h1>PyFSK Transmitter</h1>
+      <p class="subtitle">Acoustic Software-Defined Air-Gap Modem</p>
+    </div>
 
-    <label for="msg">Message to Transmit</label>
-    <input type="text" id="msg" value="Hello from Phone!" placeholder="Type ASCII text...">
+    <!-- Live Audio Oscilloscope Canvas -->
+    <div class="canvas-card">
+      <canvas id="scopeCanvas" width="400" height="110"></canvas>
+      <div class="canvas-overlay">
+        <span id="canvasModeLabel">MODE: AUDIBLE (1800 / 2200 Hz)</span>
+        <div class="legend">
+          <span class="legend-mark">● Mark (1)</span>
+          <span class="legend-space">● Space (0)</span>
+        </div>
+      </div>
+    </div>
 
+    <!-- Input Box -->
+    <label for="msgInput">ASCII Message to Transmit</label>
+    <div class="input-wrapper">
+      <input type="text" id="msgInput" value="AirGap Ping 📡" maxlength="255" placeholder="Enter ASCII text...">
+    </div>
+
+    <!-- Quick Preset Pills -->
+    <div class="quick-pills">
+      <button class="pill" onclick="setPill('AirGap Ping 📡')">📡 Ping</button>
+      <button class="pill" onclick="setPill('Secret Key: 7F9A2B')">🔑 Secret Key</button>
+      <button class="pill" onclick="setPill('Hello from iPhone!')">📱 Phone Demo</button>
+      <button class="pill" onclick="setPill('SOS Acoustic 42')">🚨 SOS Alert</button>
+    </div>
+
+    <!-- Mode and Baud Configuration -->
     <div class="grid">
       <div>
-        <label for="mode">Acoustic Mode</label>
-        <select id="mode">
-          <option value="audible" selected>Audible (1.8/2.2 kHz)</option>
-          <option value="ultrasonic">Ultrasonic (18.5/19.5 kHz)</option>
+        <label for="modeSelect">Acoustic Mode</label>
+        <select id="modeSelect" onchange="updateModeLabel()">
+          <option value="audible" selected>Audible (1.8 / 2.2 kHz)</option>
+          <option value="ultrasonic">Ultrasonic (18.5 / 19.5 kHz)</option>
         </select>
       </div>
       <div>
-        <label for="baud">Baud Rate</label>
-        <select id="baud">
-          <option value="100" selected>100 baud</option>
-          <option value="50">50 baud</option>
-          <option value="150">150 baud</option>
+        <label for="baudSelect">Baud Rate</label>
+        <select id="baudSelect">
+          <option value="100" selected>100 baud (Robust)</option>
+          <option value="50">50 baud (Long Range)</option>
+          <option value="150">150 baud (High Speed)</option>
         </select>
       </div>
     </div>
 
-    <button id="txBtn" onclick="transmitAudio()">🔊 TRANSMIT OVER SPEAKER</button>
+    <!-- Big Transmit Button -->
+    <button id="txButton" class="btn-tx" onclick="startTransmission()">
+      <span id="txIcon">🔊</span>
+      <span id="txText">TRANSMIT OVER SPEAKER</span>
+    </button>
 
-    <div class="status" id="statusBox">Ready to transmit acoustic packet.</div>
+    <!-- Packet Inspector -->
+    <div class="packet-inspector">
+      <div class="packet-row">
+        <span>Framing:</span>
+        <span class="val">16b Preamble • Sync 0x2DD4</span>
+      </div>
+      <div class="packet-row">
+        <span>Packet Size:</span>
+        <span class="val" id="pktSizeLabel">--</span>
+      </div>
+      <div class="packet-row">
+        <span>CRC-16-CCITT:</span>
+        <span class="val" id="crcLabel">--</span>
+      </div>
+      <div class="bit-stream" id="bitStreamBox">Binary bitstream preview will appear here...</div>
+    </div>
+
+    <div class="notice">
+      🔒 Zero Wi-Fi data transfer. Sound waves travel purely over the air gap.
+    </div>
   </div>
 
   <script>
+    const canvas = document.getElementById("scopeCanvas");
+    const ctx = canvas.getContext("2d");
+    let audioCtx = null;
+    let analyser = null;
+    let animId = null;
+
+    // CRC-16-CCITT (poly 0x1021, init 0xFFFF)
     function computeCRC16(bytes) {
       let crc = 0xFFFF;
       for (let i = 0; i < bytes.length; i++) {
@@ -97,18 +408,22 @@ HTML_PAGE = """<!DOCTYPE html>
       const crc = computeCRC16(dataForCrc);
       const crcBytes = [(crc >> 8) & 0xFF, crc & 0xFF];
 
-      // Preamble: 16 alternating bits (1, 0, 1, 0...)
+      // Update Inspector UI
+      document.getElementById("crcLabel").innerText = "0x" + crc.toString(16).toUpperCase().padStart(4, "0");
+      document.getElementById("pktSizeLabel").innerText = `${16 + 16 + 8 + len * 8 + 16} bits (${len} B payload)`;
+
+      // Preamble: 16 alternating bits
       const bits = [];
       for (let i = 0; i < 16; i++) {
         bits.push(i % 2 === 0 ? 1 : 0);
       }
 
-      // Sync word: 0x2DD4 (16 bits)
+      // Sync word: 0x2DD4 (16 bits: 0010 1101 1101 0100)
       for (let i = 15; i >= 0; i--) {
         bits.push((0x2DD4 >> i) & 1);
       }
 
-      // Length + Payload + CRC bits
+      // Length + Payload + CRC-16
       const fullBytes = [...dataForCrc, ...crcBytes];
       for (let b of fullBytes) {
         for (let i = 7; i >= 0; i--) {
@@ -116,26 +431,122 @@ HTML_PAGE = """<!DOCTYPE html>
         }
       }
 
+      document.getElementById("bitStreamBox").innerText = bits.join("");
       return bits;
     }
 
-    let audioCtx = null;
+    function setPill(text) {
+      document.getElementById("msgInput").value = text;
+      buildPacketBits(text);
+    }
 
-    async function transmitAudio() {
-      const btn = document.getElementById("txBtn");
-      const statusBox = document.getElementById("statusBox");
-      const text = document.getElementById("msg").value || "Hello";
-      const mode = document.getElementById("mode").value;
-      const baud = parseInt(document.getElementById("baud").value, 10);
+    function updateModeLabel() {
+      const mode = document.getElementById("modeSelect").value;
+      const label = document.getElementById("canvasModeLabel");
+      if (mode === "ultrasonic") {
+        label.innerText = "MODE: ULTRASONIC (18500 / 19500 Hz)";
+      } else {
+        label.innerText = "MODE: AUDIBLE (1800 / 2200 Hz)";
+      }
+    }
+
+    // Live Oscilloscope Idle Animation
+    function drawIdleCanvas() {
+      ctx.fillStyle = "#060911";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Grid lines
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height / 2);
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+
+      // Flat idle line with slight glow
+      ctx.strokeStyle = "rgba(0, 242, 254, 0.4)";
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = "#00f2fe";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height / 2);
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Live Oscilloscope Active Animation
+    function drawLiveScope() {
+      if (!analyser) return;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteTimeDomainData(dataArray);
+
+      ctx.fillStyle = "rgba(6, 9, 17, 0.25)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#00f2fe";
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = "#00f2fe";
+      ctx.beginPath();
+
+      const sliceWidth = canvas.width * 1.0 / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = v * (canvas.height / 2);
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+        x += sliceWidth;
+      }
+
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      animId = requestAnimationFrame(drawLiveScope);
+    }
+
+    async function startTransmission() {
+      const btn = document.getElementById("txButton");
+      const icon = document.getElementById("txIcon");
+      const textSpan = document.getElementById("txText");
+      const text = document.getElementById("msgInput").value || "Ping";
+      const mode = document.getElementById("modeSelect").value;
+      const baud = parseInt(document.getElementById("baudSelect").value, 10);
+
+      // Trigger mobile haptic vibration if supported
+      if (navigator.vibrate) {
+        navigator.vibrate([40, 60, 40]);
+      }
 
       btn.disabled = true;
-      statusBox.innerText = "Synthesizing BFSK audio waveform...";
+      btn.classList.add("transmitting");
+      icon.innerText = "⚡";
+      textSpan.innerText = "TRANSMITTING SOUND...";
 
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       }
       if (audioCtx.state === "suspended") {
         await audioCtx.resume();
+      }
+
+      if (!analyser) {
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
       }
 
       const sampleRate = audioCtx.sampleRate;
@@ -157,7 +568,7 @@ HTML_PAGE = """<!DOCTYPE html>
       const amp = 0.85;
       let phase = 0.0;
 
-      // Synthesize Continuous-Phase BFSK
+      // Synthesize Continuous-Phase BFSK (CPFSK)
       for (let s = 0; s < numSymbols; s++) {
         const bit = bits[s];
         const freq = (bit === 1) ? markFreq : spaceFreq;
@@ -170,7 +581,7 @@ HTML_PAGE = """<!DOCTYPE html>
         }
       }
 
-      // Raised-cosine window smoothing
+      // Raised-cosine edge windowing
       const rampLen = Math.min(rampSamples, Math.floor(toneSamples / 2));
       for (let i = 0; i < rampLen; i++) {
         const factorUp = 0.5 * (1.0 - Math.cos(Math.PI * i / rampLen));
@@ -179,17 +590,41 @@ HTML_PAGE = """<!DOCTYPE html>
         channelData[guardSamples + toneSamples - rampLen + i] *= factorDown;
       }
 
-      statusBox.innerHTML = `Transmitting ${bits.length} bits [${mode.toUpperCase()}] via speaker...`;
-
+      // Connect: Buffer -> Analyser -> Output Speaker
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
-      source.connect(audioCtx.destination);
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      // Start oscilloscope
+      cancelAnimationFrame(animId);
+      drawLiveScope();
+
       source.onended = () => {
+        cancelAnimationFrame(animId);
+        setTimeout(drawIdleCanvas, 150);
+
         btn.disabled = false;
-        statusBox.innerHTML = `Transmission finished! Sent <b>'${text}'</b> (${bits.length} bits).`;
+        btn.classList.remove("transmitting");
+        icon.innerText = "🔊";
+        textSpan.innerText = "TRANSMIT AGAIN";
+
+        if (navigator.vibrate) {
+          navigator.vibrate(80);
+        }
       };
+
       source.start();
     }
+
+    // Initial setup on load
+    window.addEventListener("DOMContentLoaded", () => {
+      buildPacketBits(document.getElementById("msgInput").value);
+      drawIdleCanvas();
+      document.getElementById("msgInput").addEventListener("input", (e) => {
+        buildPacketBits(e.target.value);
+      });
+    });
   </script>
 </body>
 </html>
@@ -209,7 +644,7 @@ def get_local_ip() -> str:
 
 
 class FSKRequestHandler(http.server.BaseHTTPRequestHandler):
-    """Serves the single-page mobile transmitter HTML application."""
+    """Serves the interactive mobile transmitter HTML application."""
 
     def do_GET(self) -> None:
         """Handle HTTP GET request."""
@@ -225,20 +660,24 @@ class FSKRequestHandler(http.server.BaseHTTPRequestHandler):
 
 
 def start_web_transmitter(port: int = 8080) -> None:
-    """Start local web server hosting the phone transmitter interface."""
+    """Start local web server hosting the interactive phone transmitter interface."""
     local_ip = get_local_ip()
     url = f"http://{local_ip}:{port}"
 
-    print("=" * 65)
-    print("PyFSK-Modem: Mobile Phone Transmitter Web Interface")
-    print("=" * 65)
-    print(f"\n  1. Connect your phone to the same Wi-Fi / LAN.")
-    print(f"  2. Open this URL in your phone's browser (Safari/Chrome):")
+    print("=" * 68)
+    print(" PyFSK-Modem: Interactive Mobile Phone Transmitter")
+    print("=" * 68)
+    print(f"\n  1. Connect your phone to the same Wi-Fi network.")
+    print(f"  2. Open this link in your phone's browser (Safari or Chrome):")
     print(f"\n     👉  \033[1;32m{url}\033[0m  👈\n")
-    print(f"  3. Type any message on your phone and tap TRANSMIT!")
-    print(f"  4. Your laptop's `pyfsk_modem listen` will pick it up!")
-    print(f"\n(Press Ctrl+C to stop the web server)\n")
-    print("=" * 65)
+    print(f"  3. In a second terminal on your laptop, start listening:")
+    print(f"     \033[1;36mpython -m pyfsk_modem listen --mode audible\033[0m")
+    print(f"\n  4. Type a message on your phone and tap TRANSMIT OVER SPEAKER!")
+    print(f"     (Features live audio oscilloscope, bitstream inspector & haptics)\n")
+    print("  * Air-Gap Guarantee: Wi-Fi is only used to deliver the webpage.")
+    print("    You can turn on Airplane Mode on your phone once loaded to verify!")
+    print("\n(Press Ctrl+C to stop the web transmitter server)\n")
+    print("=" * 68)
 
     server = http.server.ThreadingHTTPServer(("0.0.0.0", port), FSKRequestHandler)
     try:
