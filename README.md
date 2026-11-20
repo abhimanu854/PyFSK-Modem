@@ -115,10 +115,18 @@ python -m pyfsk_modem send "Low Volume" --device 0 --amplitude 0.5
 
 ### 3. Mobile Phone Transmitter (Interactive Web UI)
 Transmit directly from any smartphone (iOS or Android) without installing software on the phone:
+
+#### Option A: Open `phone_tx.html` Directly (Zero Network / Zero Setup)
+The standalone file **[`phone_tx.html`](phone_tx.html)** is completely self-contained. You can:
+1. Transfer `phone_tx.html` to your phone via WhatsApp, Telegram, email, AirDrop, or Google Drive.
+2. Tap the file on your phone to open it in **Chrome** or **Safari**.
+3. Type any message and tap **TRANSMIT OVER SPEAKER**!
+
+#### Option B: Host Locally via Python Web Server
 ```bash
 python -m pyfsk_modem web
 ```
-Open the displayed URL (e.g., `http://192.168.1.X:8080`) in your phone's browser (Safari or Chrome), type a message, and tap **TRANSMIT OVER SPEAKER**!
+Open the displayed URL (e.g., `http://192.168.1.16:8080`) in your phone's browser. *(Note: If your Linux firewall blocks port 8080, run `sudo firewall-cmd --add-port=8080/tcp`)*.
 
 #### 🔒 Zero-Network Air-Gap Guarantee
 > **Does the web app send text to the laptop over Wi-Fi?**

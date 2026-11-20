@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PyFSK Acoustic Air-Gap Transmitter</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(22, 27, 44, 0.85);
+      --border: #2d3748;
+      --accent: #00f2fe;
+      --accent-glow: rgba(0, 242, 254, 0.4);
+      --mark-color: #00ff87;
+      --space-color: #ff007f;
+      --text: #f0f6fc;
+      --text-muted: #8b949e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "SF Pro Display", sans-serif; }
+    body {
+      background: radial-gradient(circle at 50% 20%, #151c33 0%, #080a10 100%);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+      overflow-x: hidden;
+    }
+    .hud-container {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 242, 254, 0.25);
+      border-radius: 24px;
+      padding: 24px 20px;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px var(--accent-glow);
+      position: relative;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 18px;
+      position: relative;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(0, 255, 135, 0.12);
+      border: 1px solid #00ff87;
+      color: #00ff87;
+      margin-bottom: 10px;
+    }
+    .status-badge .dot {
+      width: 7px;
+      height: 7px;
+      background: #00ff87;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #00ff87;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+    h1 {
+      font-size: 1.55rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .canvas-card {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #060911;
+      margin-bottom: 16px;
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.8);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 110px;
+    }
+    .canvas-overlay {
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      font-family: monospace;
+      pointer-events: none;
+    }
+    .canvas-overlay .legend {
+      display: flex;
+      gap: 10px;
+    }
+    .legend-mark { color: var(--mark-color); }
+    .legend-space { color: var(--space-color); }
+
+    label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .input-wrapper {
+      position: relative;
+      margin-bottom: 14px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 14px 16px;
+      background: #0a0e1a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 1rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+    .quick-pills {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 14px;
+      scrollbar-width: none;
+    }
+    .quick-pills::-webkit-scrollbar { display: none; }
+    .pill {
+      white-space: nowrap;
+      padding: 5px 10px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.72rem;
+      color: #c9d1d9;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .pill:hover, .pill:active {
+      background: rgba(0, 242, 254, 0.2);
+      border-color: var(--accent);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    select {
+      width: 100%;
+      padding: 12px;
+      background: #0a0e1a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .btn-tx {
+      width: 100%;
+      padding: 18px;
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      border: none;
+      border-radius: 16px;
+      color: #050a14;
+      font-size: 1.12rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0, 242, 254, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .btn-tx:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(0, 242, 254, 0.6);
+    }
+    .btn-tx:active {
+      transform: translateY(1px);
+    }
+    .btn-tx:disabled {
+      background: #1f2738;
+      color: #556075;
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-tx.transmitting {
+      background: linear-gradient(135deg, #ff0844 0%, #ffb199 100%);
+      box-shadow: 0 0 30px rgba(255, 8, 68, 0.7);
+      animation: txPulse 0.8s infinite alternate;
+    }
+    @keyframes txPulse {
+      0% { transform: scale(0.99); opacity: 0.9; }
+      100% { transform: scale(1.02); opacity: 1; }
+    }
+    .packet-inspector {
+      margin-top: 16px;
+      background: #060911;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 0.75rem;
+      font-family: monospace;
+    }
+    .packet-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      color: var(--text-muted);
+    }
+    .packet-row span.val { color: var(--accent); font-weight: bold; }
+    .bit-stream {
+      word-break: break-all;
+      color: #58a6ff;
+      max-height: 48px;
+      overflow-y: auto;
+      margin-top: 6px;
+      font-size: 0.68rem;
+      line-height: 1.3;
+      padding: 4px 6px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 6px;
+    }
+    .notice {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 0.7rem;
+      color: #6e7681;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="hud-container">
+    <div class="header">
+      <div class="status-badge">
+        <div class="dot"></div>
+        <span>Air-Gap Ready • 100% Client-Side</span>
+      </div>
+      <h1>PyFSK Transmitter</h1>
+      <p class="subtitle">Acoustic Software-Defined Air-Gap Modem</p>
+    </div>
+
+    <!-- Live Audio Oscilloscope Canvas -->
+    <div class="canvas-card">
+      <canvas id="scopeCanvas" width="400" height="110"></canvas>
+      <div class="canvas-overlay">
+        <span id="canvasModeLabel">MODE: AUDIBLE (1800 / 2200 Hz)</span>
+        <div class="legend">
+          <span class="legend-mark">● Mark (1)</span>
+          <span class="legend-space">● Space (0)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Box -->
+    <label for="msgInput">ASCII Message to Transmit</label>
+    <div class="input-wrapper">
+      <input type="text" id="msgInput" value="AirGap Ping 📡" maxlength="255" placeholder="Enter ASCII text...">
+    </div>
+
+    <!-- Quick Preset Pills -->
+    <div class="quick-pills">
+      <button class="pill" onclick="setPill('AirGap Ping 📡')">📡 Ping</button>
+      <button class="pill" onclick="setPill('Secret Key: 7F9A2B')">🔑 Secret Key</button>
+      <button class="pill" onclick="setPill('Hello from Phone!')">📱 Phone Demo</button>
+      <button class="pill" onclick="setPill('SOS Acoustic 42')">🚨 SOS Alert</button>
+    </div>
+
+    <!-- Mode and Baud Configuration -->
+    <div class="grid">
+      <div>
+        <label for="modeSelect">Acoustic Mode</label>
+        <select id="modeSelect" onchange="updateModeLabel()">
+          <option value="audible" selected>Audible (1.8 / 2.2 kHz)</option>
+          <option value="ultrasonic">Ultrasonic (18.5 / 19.5 kHz)</option>
+        </select>
+      </div>
+      <div>
+        <label for="baudSelect">Baud Rate</label>
+        <select id="baudSelect">
+          <option value="100" selected>100 baud (Robust)</option>
+          <option value="50">50 baud (Long Range)</option>
+          <option value="150">150 baud (High Speed)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Big Transmit Button -->
+    <button id="txButton" class="btn-tx" onclick="startTransmission()">
+      <span id="txIcon">🔊</span>
+      <span id="txText">TRANSMIT OVER SPEAKER</span>
+    </button>
+
+    <!-- Packet Inspector -->
+    <div class="packet-inspector">
+      <div class="packet-row">
+        <span>Framing:</span>
+        <span class="val">16b Preamble • Sync 0x2DD4</span>
+      </div>
+      <div class="packet-row">
+        <span>Packet Size:</span>
+        <span class="val" id="pktSizeLabel">--</span>
+      </div>
+      <div class="packet-row">
+        <span>CRC-16-CCITT:</span>
+        <span class="val" id="crcLabel">--</span>
+      </div>
+      <div class="bit-stream" id="bitStreamBox">Binary bitstream preview will appear here...</div>
+    </div>
+
+    <div class="notice">
+      🔒 Zero Wi-Fi data transfer. Sound waves travel purely over the air gap.
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("scopeCanvas");
+    const ctx = canvas.getContext("2d");
+    let audioCtx = null;
+    let analyser = null;
+    let animId = null;
+
+    function computeCRC16(bytes) {
+      let crc = 0xFFFF;
+      for (let i = 0; i < bytes.length; i++) {
+        crc ^= (bytes[i] << 8);
+        for (let j = 0; j < 8; j++) {
+          if (crc & 0x8000) {
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+          } else {
+            crc = (crc << 1) & 0xFFFF;
+          }
+        }
+      }
+      return crc;
+    }
+
+    function buildPacketBits(text) {
+      const encoder = new TextEncoder();
+      const payloadBytes = encoder.encode(text).slice(0, 255);
+      const len = payloadBytes.length;
+
+      const dataForCrc = new Uint8Array(1 + len);
+      dataForCrc[0] = len;
+      dataForCrc.set(payloadBytes, 1);
+
+      const crc = computeCRC16(dataForCrc);
+      const crcBytes = [(crc >> 8) & 0xFF, crc & 0xFF];
+
+      document.getElementById("crcLabel").innerText = "0x" + crc.toString(16).toUpperCase().padStart(4, "0");
+      document.getElementById("pktSizeLabel").innerText = `${16 + 16 + 8 + len * 8 + 16} bits (${len} B payload)`;
+
+      const bits = [];
+      for (let i = 0; i < 16; i++) {
+        bits.push(i % 2 === 0 ? 1 : 0);
+      }
+
+      for (let i = 15; i >= 0; i--) {
+        bits.push((0x2DD4 >> i) & 1);
+      }
+
+      const fullBytes = [...dataForCrc, ...crcBytes];
+      for (let b of fullBytes) {
+        for (let i = 7; i >= 0; i--) {
+          bits.push((b >> i) & 1);
+        }
+      }
+
+      document.getElementById("bitStreamBox").innerText = bits.join("");
+      return bits;
+    }
+
+    function setPill(text) {
+      document.getElementById("msgInput").value = text;
+      buildPacketBits(text);
+    }
+
+    function updateModeLabel() {
+      const mode = document.getElementById("modeSelect").value;
+      const label = document.getElementById("canvasModeLabel");
+      if (mode === "ultrasonic") {
+        label.innerText = "MODE: ULTRASONIC (18500 / 19500 Hz)";
+      } else {
+        label.innerText = "MODE: AUDIBLE (1800 / 2200 Hz)";
+      }
+    }
+
+    function drawIdleCanvas() {
+      ctx.fillStyle = "#060911";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height / 2);
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(0, 242, 254, 0.4)";
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = "#00f2fe";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height / 2);
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    function drawLiveScope() {
+      if (!analyser) return;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteTimeDomainData(dataArray);
+
+      ctx.fillStyle = "rgba(6, 9, 17, 0.25)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#00f2fe";
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = "#00f2fe";
+      ctx.beginPath();
+
+      const sliceWidth = canvas.width * 1.0 / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = v * (canvas.height / 2);
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+        x += sliceWidth;
+      }
+
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      animId = requestAnimationFrame(drawLiveScope);
+    }
+
+    async function startTransmission() {
+      const btn = document.getElementById("txButton");
+      const icon = document.getElementById("txIcon");
+      const textSpan = document.getElementById("txText");
+      const text = document.getElementById("msgInput").value || "Ping";
+      const mode = document.getElementById("modeSelect").value;
+      const baud = parseInt(document.getElementById("baudSelect").value, 10);
+
+      if (navigator.vibrate) {
+        navigator.vibrate([40, 60, 40]);
+      }
+
+      btn.disabled = true;
+      btn.classList.add("transmitting");
+      icon.innerText = "⚡";
+      textSpan.innerText = "TRANSMITTING SOUND...";
+
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === "suspended") {
+        await audioCtx.resume();
+      }
+
+      if (!analyser) {
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+      }
+
+      const sampleRate = audioCtx.sampleRate;
+      const markFreq = mode === "ultrasonic" ? 18500.0 : 1800.0;
+      const spaceFreq = mode === "ultrasonic" ? 19500.0 : 2200.0;
+      const samplesPerSymbol = Math.round(sampleRate / baud);
+
+      const bits = buildPacketBits(text);
+      const numSymbols = bits.length;
+      const toneSamples = numSymbols * samplesPerSymbol;
+
+      const guardSamples = Math.round(0.05 * sampleRate);
+      const rampSamples = Math.round(0.01 * sampleRate);
+      const totalSamples = guardSamples + toneSamples + guardSamples;
+
+      const buffer = audioCtx.createBuffer(1, totalSamples, sampleRate);
+      const channelData = buffer.getChannelData(0);
+
+      const amp = 0.85;
+      let phase = 0.0;
+
+      for (let s = 0; s < numSymbols; s++) {
+        const bit = bits[s];
+        const freq = (bit === 1) ? markFreq : spaceFreq;
+        const phaseInc = 2.0 * Math.PI * freq / sampleRate;
+        const startIdx = guardSamples + s * samplesPerSymbol;
+
+        for (let i = 0; i < samplesPerSymbol; i++) {
+          phase += phaseInc;
+          channelData[startIdx + i] = amp * Math.sin(phase);
+        }
+      }
+
+      const rampLen = Math.min(rampSamples, Math.floor(toneSamples / 2));
+      for (let i = 0; i < rampLen; i++) {
+        const factorUp = 0.5 * (1.0 - Math.cos(Math.PI * i / rampLen));
+        const factorDown = 0.5 * (1.0 + Math.cos(Math.PI * i / rampLen));
+        channelData[guardSamples + i] *= factorUp;
+        channelData[guardSamples + toneSamples - rampLen + i] *= factorDown;
+      }
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      cancelAnimationFrame(animId);
+      drawLiveScope();
+
+      source.onended = () => {
+        cancelAnimationFrame(animId);
+        setTimeout(drawIdleCanvas, 150);
+
+        btn.disabled = false;
+        btn.classList.remove("transmitting");
+        icon.innerText = "🔊";
+        textSpan.innerText = "TRANSMIT AGAIN";
+
+        if (navigator.vibrate) {
+          navigator.vibrate(80);
+        }
+      };
+
+      source.start();
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      buildPacketBits(document.getElementById("msgInput").value);
+      drawIdleCanvas();
+      document.getElementById("msgInput").addEventListener("input", (e) => {
+        buildPacketBits(e.target.value);
+      });
+    });
+  </script>
+</body>
+</html>
