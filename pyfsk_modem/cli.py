@@ -14,6 +14,7 @@ from pyfsk_modem.loopback import run_loopback, sweep_snr_ber
 from pyfsk_modem.receiver import Receiver, ReceiverError
 from pyfsk_modem.transmitter import AudioDeviceError, Transmitter
 from pyfsk_modem.visualizer import SpectrumWaterfallVisualizer
+from pyfsk_modem.web_app import start_web_transmitter
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -76,6 +77,12 @@ def cmd_send(args: argparse.Namespace) -> int:
 
     tx = Transmitter(cfg)
     try:
+        if args.wav:
+            print(f"[TX] Exporting modulated waveform to WAV file: '{args.wav}'...")
+            tx.save_wav(args.message, args.wav)
+            print(f"[TX] WAV file saved successfully: '{args.wav}'! You can play this audio on your phone.\n")
+            return 0
+
         print("[TX] Transmitting audio over air gap...")
         tx.transmit(args.message, device=args.device, blocking=True)
         print("[TX] Transmission complete!\n")
@@ -83,6 +90,15 @@ def cmd_send(args: argparse.Namespace) -> int:
     except AudioDeviceError as exc:
         print(f"[ERROR] Audio playback failed: {exc}", file=sys.stderr)
         return 1
+    except Exception as exc:
+        print(f"[ERROR] Failed to save WAV file: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_web(args: argparse.Namespace) -> int:
+    """Launch local web server for mobile phone acoustic transmission."""
+    start_web_transmitter(port=args.port)
+    return 0
 
 
 def cmd_listen(args: argparse.Namespace) -> int:
@@ -211,6 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_send.add_argument("--device", help="Output audio device index or substring")
     p_send.add_argument("--amplitude", type=float, default=0.8, help="Output peak amplitude 0.0-1.0")
     p_send.add_argument("--sample-rate", type=int, default=44100, help="Sample rate in Hz (default: 44100)")
+    p_send.add_argument("--wav", help="Export to a .wav audio file instead of playing immediately (play on phone)")
     p_send.add_argument("-v", "--verbose", action="store_true", help="Verbose debug logging")
 
     # listen
@@ -237,6 +254,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_loop.add_argument("--plot-file", default="ber_vs_snr.png", help="Path to save BER plot (default: ber_vs_snr.png)")
     p_loop.add_argument("-v", "--verbose", action="store_true", help="Verbose debug logging")
 
+    # web (mobile phone transmitter)
+    p_web = subparsers.add_parser("web", help="Launch mobile phone Web Audio transmitter interface")
+    p_web.add_argument("--port", type=int, default=8080, help="Port to host web transmitter on (default: 8080)")
+
     return parser
 
 
@@ -253,6 +274,8 @@ def main(args: Optional[List[str]] = None) -> int:
         return cmd_listen(parsed_args)
     elif parsed_args.command == "loopback":
         return cmd_loopback(parsed_args)
+    elif parsed_args.command == "web":
+        return cmd_web(parsed_args)
     else:
         parser.print_help()
         return 0

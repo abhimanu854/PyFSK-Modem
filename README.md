@@ -98,7 +98,7 @@ python -m pyfsk_modem devices
 ```
 
 ### 2. Transmit Message (TX)
-Transmit text over your speaker:
+Transmit text over your speaker or export for playback on a phone:
 ```bash
 # Audible transmission at default 100 baud
 python -m pyfsk_modem send "Hello Air Gap!"
@@ -106,11 +106,21 @@ python -m pyfsk_modem send "Hello Air Gap!"
 # Silent ultrasonic transmission at 120 baud
 python -m pyfsk_modem send "Confidential Message" --mode ultrasonic --baud 120
 
+# Export modulated audio to a WAV file to play through your smartphone
+python -m pyfsk_modem send "Secret from Phone" --wav phone_msg.wav
+
 # Specify audio output device and lower amplitude
 python -m pyfsk_modem send "Low Volume" --device 0 --amplitude 0.5
 ```
 
-### 3. Receive / Listen (RX)
+### 3. Mobile Phone Transmitter (Web UI)
+Transmit directly from any smartphone without installing software on the phone:
+```bash
+python -m pyfsk_modem web
+```
+Open the displayed URL (e.g. `http://192.168.1.X:8080`) in your phone's browser (Safari or Chrome), type a message, and tap **TRANSMIT** to send acoustic packets via the phone's speaker!
+
+### 4. Receive / Listen (RX)
 Continuously listen on your microphone and decode incoming packets:
 ```bash
 # Listen in audible mode
@@ -123,7 +133,7 @@ python -m pyfsk_modem listen --mode ultrasonic --visualize
 python -m pyfsk_modem listen --squelch 3.5
 ```
 
-### 4. Software Loopback & BER Testing
+### 5. Software Loopback & BER Testing
 Simulate transmission through an Additive White Gaussian Noise (AWGN) channel in memory without audio hardware:
 ```bash
 # Test loopback at 10 dB SNR

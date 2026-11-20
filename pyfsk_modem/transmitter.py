@@ -116,3 +116,27 @@ class Transmitter:
         audio = self.modulator.modulate(payload)
         self.play(audio, device=device, blocking=blocking, sample_rate=self.config.sample_rate)
         return audio
+
+    def save_wav(self, payload: str | bytes, wav_path: str) -> np.ndarray:
+        """Modulate text/bytes and export to a standard WAV audio file.
+
+        Args:
+            payload: ASCII text string or raw bytes to transmit.
+            wav_path: Target path for .wav file.
+
+        Returns:
+            The synthesized float32 audio waveform.
+        """
+        import wave
+
+        audio = self.modulator.modulate(payload)
+        # Convert float32 [-1.0, 1.0] to 16-bit PCM
+        pcm16 = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
+
+        with wave.open(wav_path, "wb") as wf:
+            wf.setnchannels(1)  # Mono
+            wf.setsampwidth(2)  # 16-bit
+            wf.setframerate(self.config.sample_rate)
+            wf.writeframes(pcm16.tobytes())
+
+        return audio
