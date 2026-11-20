@@ -93,29 +93,24 @@ class Transmitter:
         Returns:
             The synthesized float32 audio waveform.
         """
-        # Validate or adapt sample rate
-        sample_rate = self.config.sample_rate
         try:
-            sd.check_output_settings(device=device, samplerate=sample_rate)
-        except Exception:
-            dev_info = sd.query_devices(device=device, kind="output")
-            hw_sr = int(dev_info.get("default_samplerate", 44100))
-            if hw_sr != sample_rate:
-                logger.warning(
-                    f"Sample rate {sample_rate} Hz unsupported by output hardware; "
-                    f"auto-adapting to hardware default {hw_sr} Hz."
-                )
-                self.config = ModemConfig.create(
-                    mode=self.config.mode,
-                    baud_rate=self.config.baud_rate,
-                    sample_rate=hw_sr,
-                    amplitude=self.config.amplitude,
-                )
-                self.modulator = Modulator(self.config)
-
-        audio = self.modulator.modulate(payload)
-        self.play(audio, device=device, blocking=blocking, sample_rate=self.config.sample_rate)
-        return audio
+            audio = self.modulator.modulate(payload)
+            self.play(audio, device=device, blocking=blocking, sample_rate=self.config.sample_rate)
+            return audio
+        except AudioDeviceError as exc:
+            # Try hardware default fallback if primary sample rate rejected
+            fallback_sr = 48000 if self.config.sample_rate == 44100 else 44100
+            logger.warning(f"Audio playback error ({exc}); retrying with fallback sample rate {fallback_sr} Hz.")
+            self.config = ModemConfig.create(
+                mode=self.config.mode,
+                baud_rate=self.config.baud_rate,
+                sample_rate=fallback_sr,
+                amplitude=self.config.amplitude,
+            )
+            self.modulator = Modulator(self.config)
+            audio = self.modulator.modulate(payload)
+            self.play(audio, device=device, blocking=blocking, sample_rate=fallback_sr)
+            return audio
 
     def save_wav(self, payload: str | bytes, wav_path: str) -> np.ndarray:
         """Modulate text/bytes and export to a standard WAV audio file.

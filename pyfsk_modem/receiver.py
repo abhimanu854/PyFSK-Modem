@@ -110,38 +110,46 @@ class Receiver:
         self._is_running = True
         start_time = time.time()
 
-        # Validate or negotiate hardware sample rate
-        sample_rate = self.config.sample_rate
+        # Query hardware device settings safely without calling Pa_IsFormatSupported
         try:
-            sd.check_input_settings(device=device, samplerate=sample_rate)
-        except Exception as check_exc:
             dev_info = sd.query_devices(device=device, kind="input")
             hw_sr = int(dev_info.get("default_samplerate", 44100))
-            if hw_sr != sample_rate:
-                logger.warning(
-                    f"Sample rate {sample_rate} Hz unsupported by audio hardware; "
-                    f"auto-adapting to hardware default {hw_sr} Hz."
-                )
-                self.config = ModemConfig.create(
-                    mode=self.config.mode,
-                    baud_rate=self.config.baud_rate,
-                    sample_rate=hw_sr,
-                    squelch_threshold=self.config.squelch_threshold,
-                )
-                self.demodulator = Demodulator(self.config)
-                sample_rate = hw_sr
+            if hw_sr > 0 and hw_sr != self.config.sample_rate:
+                logger.info(f"Hardware default sample rate is {hw_sr} Hz (configured: {self.config.sample_rate} Hz).")
+        except Exception as exc:
+            logger.debug(f"Device query skipped: {exc}")
 
         self.demodulator.reset()
 
-        try:
-            with sd.InputStream(
-                samplerate=self.config.sample_rate,
+        def run_stream(sr: int):
+            return sd.InputStream(
+                samplerate=sr,
                 channels=1,
                 dtype="float32",
                 blocksize=block_size,
                 device=device,
                 callback=self._audio_callback,
-            ):
+            )
+
+        # Open stream, with automatic fallback if sample rate rejected
+        stream = None
+        current_sr = self.config.sample_rate
+        try:
+            stream = run_stream(current_sr)
+        except sd.PortAudioError:
+            fallback_sr = 48000 if current_sr == 44100 else 44100
+            logger.warning(f"Failed to open audio input at {current_sr} Hz; falling back to {fallback_sr} Hz.")
+            self.config = ModemConfig.create(
+                mode=self.config.mode,
+                baud_rate=self.config.baud_rate,
+                sample_rate=fallback_sr,
+                squelch_threshold=self.config.squelch_threshold,
+            )
+            self.demodulator = Demodulator(self.config)
+            stream = run_stream(fallback_sr)
+
+        try:
+            with stream:
                 logger.info(
                     f"Listening for BFSK packets [{self.config.mode.value.upper()}] "
                     f"@ {self.config.baud_rate} baud (sample rate {self.config.sample_rate} Hz)..."
